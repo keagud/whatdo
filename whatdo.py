@@ -1,6 +1,6 @@
-import re, sys, os, argparse, pathlib
-from collections import namedtuple
-from itertools import chain
+import re, os, argparse
+from dataclasses import dataclass
+from itertools import count
 
 parser = argparse.ArgumentParser(add_help=False)
 
@@ -45,6 +45,24 @@ parser.add_argument(
     action="store_true",
     help="Search inside hidden directories and files ",
 )
+
+
+@dataclass
+class TodoItem:
+    """Represents a single todo item"""
+
+    line_num: int
+    content: str
+    index: int = 0
+
+
+@dataclass
+class TodosFile:
+    """Represents todos within a single file"""
+
+    filename: str
+    items: list[TodoItem]
+    index: int = 0
 
 
 def file_path_generator(
@@ -92,47 +110,70 @@ def match_any(patterns: list[str | re.Pattern], text: str):
     return False
 
 
-def get_file_todos(
+def todos_from_file(
     file_path: os.PathLike,
     patterns: list[str | re.Pattern] = [r"^\W*\s*TODO"],
 ):
 
-    with open(file_path, "r") as infile:
-        file_lines = infile.readlines()
+    try:
+        with open(file_path, "r", encoding='utf-8') as infile:
+            file_lines = infile.readlines()
+    except UnicodeDecodeError:
+        # kind of a hacky way to ensure binary files are skipped
+        # but if it's stupid and it works it ain't stupid!
+        return None
 
-    # return a list of tuples
-    # first value is the line number of the match, second is the content
+    counter = count(1)
+
+    # convert any lines matching a pattern to a TodoItem dataclass
     matches = [
-        (num, line.strip())
+        TodoItem(num, line, index=next(counter))
         for num, line in enumerate(file_lines, start=1)
         if match_any(patterns, line)
     ]
 
-    return matches
+    if not any(matches):
+        return None
+
+    file_todos = TodosFile(str(file_path), matches)
+
+    return file_todos
+
+
+def todos_generator(
+    root_path: os.PathLike | str = "",
+    recurse: bool = True,
+    ignore_hidden: bool = True,
+    patterns: list[str | re.Pattern] = [r"^\W*\s*TODO"],
+):
+
+    files = file_path_generator(
+        root_path=root_path, recurse=recurse, ignore_hidden=ignore_hidden
+    )
+
+    counter = count(1)
+
+    for file_path in files:
+        if (file_todos := todos_from_file(file_path, patterns=patterns)) is None:
+            continue
+
+        file_todos.index = next(counter)
+        yield file_todos
+
+    return
+
 
 
 def main():
 
-    files_generator = file_path_generator(".")
-    total_todos = [
-        (f.path, file_results)
-        for f in files_generator
-        if (file_results := get_file_todos(f))
-    ]
+    tgen = todos_generator(root_path='..')
+
+    for f in tgen:
+        print(str(f))
+        print("")
 
     editor: str = "vim"
     if "EDITOR" in os.environ:
         editor = os.environ["EDITOR"]
-
-    for file_summary in total_todos:
-        file_path, todos_list = file_summary
-        print(file_path)
-
-        for todo_item in todos_list:
-            line_number, todo_content = todo_item
-            print("(line {}) {}".format(line_number, todo_content))
-
-    args = parser.parse_args()
-
 
 main()
