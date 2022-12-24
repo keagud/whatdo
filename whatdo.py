@@ -69,6 +69,22 @@ class TodosFile:
     index: int = 0
 
 
+def colorize(text: str, color: str) -> str:
+    ansi_esc = "\033["
+    color_codes = {
+        "BLACK": 90,
+        "RED": 91,
+        "GREEN": 92,
+        "YELLOW": 93,
+        "BLUE": 94,
+        "MAGENTA": 95,
+        "CYAN": 96,
+        "WHITE": 97,
+    }
+
+    return "{}{}m{}{}0m".format(ansi_esc, color_codes[color.upper()], text, ansi_esc)
+
+
 def file_path_generator(
     root_path: os.PathLike | str = "", recurse: bool = True, ignore_hidden: bool = True
 ) -> Iterable[os.DirEntry]:
@@ -113,6 +129,7 @@ def todos_generator(
     if pattern is None:
         pattern = r"^\W*\s*TODO"
 
+    # TODO remove this, and refactor so that all functions that take a regex param only take one, instead of a list
     match_any = lambda patterns, text: any(
         ((re.search(pattern, text)) for pattern in patterns)
     )
@@ -134,7 +151,7 @@ def todos_generator(
         matches = [
             TodoItem(num, line, index=next(matched_line_counter))
             for num, line in enumerate(file_lines, start=1)
-            if match_any(patterns, line)
+            if match_any([pattern], line)
         ]
 
         if not any(matches):
