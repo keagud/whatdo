@@ -1,4 +1,7 @@
-import re, os, argparse
+#!/usr/bin/env python
+
+import re, os, argparse, sys
+
 from dataclasses import dataclass
 from itertools import count, dropwhile
 from typing import Iterable
@@ -9,13 +12,15 @@ parser = argparse.ArgumentParser(add_help=False)
 parser.add_argument("--help", action="help", help="show this help message and exit")
 
 
-parser.add_argument("-d", "--dir", help="Root directory to start searching")
+parser.add_argument("-d", "--dir", type=str, help="Root directory to start searching")
+
 parser.add_argument(
     "-c",
     "--count",
     action="store_true",
     help="Only display the total number of todos and suppress details",
 )
+
 parser.add_argument(
     "-g",
     "--goto",
@@ -25,9 +30,7 @@ parser.add_argument(
     const="FIRST",
     help="Open a todo item by number in EDITOR (defaults to vim if not set). Only works for programs that follow the CLI syntax 'program +line filename': this includes (n)vim and nano",
 )
-parser.add_argument(
-    "-l", "--list", action="store_true", help="List and number all found todos"
-)
+
 
 parser.add_argument(
     "-p", "--pattern", type=str, help="Set a custom regex pattern for use in the search"
@@ -35,9 +38,9 @@ parser.add_argument(
 
 parser.add_argument(
     "-n",
-    "--no-recurse",
+    "--norecurse",
     action="store_true",
-    help="Only search in files directly inside DIR, not subdirectories (default is false)",
+    help="Only search in files directly inside DIR, not subdirectories",
 )
 
 parser.add_argument(
@@ -104,9 +107,11 @@ def file_path_generator(
 
 
 def todos_generator(
-    files_iter: Iterable[os.PathLike],
-    patterns: list[re.Pattern | str] = [r"^\W*\s*TODO"],
+    files_iter: Iterable[os.PathLike], pattern: re.Pattern | str | None = None
 ) -> Iterable[TodosFile]:
+
+    if pattern is None:
+        pattern = r"^\W*\s*TODO"
 
     match_any = lambda patterns, text: any(
         ((re.search(pattern, text)) for pattern in patterns)
@@ -148,17 +153,48 @@ def open_at_index(
     for file_todo in dropwhile(lambda x: x.index != file_index, todos_iter):
         for todo_item in dropwhile(lambda x: x.index != item_index, file_todo.items):
 
-            line_jump_command = '+' + str(todo_item.index)
-            os.execlp(editor_command,line_jump_command, file_todo.filename)  
+            line_jump_command = "+" + str(todo_item.index)
+            os.execlp(editor_command, line_jump_command, file_todo.filename)
 
     raise KeyError("Could not match '{}' to an indexed location".format(index))
 
 
+def count_todos(todos_iter: Iterable[TodosFile]):
+
+    items_sums = [(file.filename, len(file.items)) for file in todos_iter]
+    total_sum = sum([file_sum for filename, file_sum in items_sums])
+    return items_sums, total_sum
+
+
 def main():
+
+    args = parser.parse_args()
 
     editor: str = "vim"
     if "EDITOR" in os.environ:
         editor = os.environ["EDITOR"]
 
+    start_dir: str = os.getcwd() if not args.dir else args.dir
 
-main()
+    count_only = bool(args.count)
+
+    pattern = args.pattern if args.pattern else None
+
+    recurse = not bool(args.norecurse)
+    ignore_hidden = not bool(args.hidden)
+
+    files_iter = file_path_generator(start_dir, recurse, ignore_hidden=ignore_hidden)
+
+    todos_iter = todos_generator(files_iter, pattern=pattern)
+
+    if count_only:
+        items_sums, total_sum = count_todos(todos_iter)
+
+        map(lambda x: print("{} items in file {}".format(x[1], x[0])), items_sums)
+
+        print("\n {} total todo items in {} files".format(total_sum, len(items_sums)))
+        sys.exit()
+
+
+if __name__ == "__main__":
+    main()
