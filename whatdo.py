@@ -1,7 +1,7 @@
 import re, os, argparse
 from dataclasses import dataclass
-from itertools import count
-from typing import Callable, Iterable, Any
+from itertools import count, dropwhile
+from typing import Iterable
 
 parser = argparse.ArgumentParser(add_help=False)
 
@@ -140,13 +140,21 @@ def todos_generator(
         yield TodosFile(str(rel_file_path), matches, next(files_processed_counter))
 
 
+def open_at_index(
+    index: str, todos_iter: Iterable[TodosFile], editor_command: str = "vim"
+):
+    file_index, item_index = (int(s) for s in re.split(r"\D", index, maxsplit=2))
+
+    for file_todo in dropwhile(lambda x: x.index != file_index, todos_iter):
+        for todo_item in dropwhile(lambda x: x.index != item_index, file_todo.items):
+
+            line_jump_command = '+' + str(todo_item.index)
+            os.execlp(editor_command,line_jump_command, file_todo.filename)  
+
+    raise KeyError("Could not match '{}' to an indexed location".format(index))
+
+
 def main():
-
-    f = file_path_generator("../dateparse")
-    t = todos_generator(f)
-
-    for x in t:
-        print(str(x))
 
     editor: str = "vim"
     if "EDITOR" in os.environ:
