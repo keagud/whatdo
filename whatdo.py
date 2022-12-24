@@ -141,7 +141,6 @@ def todos_generator(
 
     if pattern is None:
         pattern = r"^\W*\s*TODO"
-
     files_processed_counter = count(1)
 
     for file_path in files_iter:
@@ -207,6 +206,8 @@ def count_todos(todos_iter: Iterable[TodosFile]):
 
 def main():
     """Parses CLI args, and executes main program logic accordingly."""
+
+    args = parser.parse_args()
 
     args = parser.parse_args()
 
