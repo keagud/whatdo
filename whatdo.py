@@ -1,6 +1,7 @@
 import re, os, argparse
 from dataclasses import dataclass
 from itertools import count
+from typing import Callable, Iterable, Any
 
 parser = argparse.ArgumentParser(add_help=False)
 
@@ -67,7 +68,7 @@ class TodosFile:
 
 def file_path_generator(
     root_path: os.PathLike | str = "", recurse: bool = True, ignore_hidden: bool = True
-):
+) -> Iterable[os.DirEntry]:
 
     # set the root path
 
@@ -100,80 +101,56 @@ def file_path_generator(
 
             for subitem in sub_generator:
                 yield subitem
-    return
-
-
-def match_any(patterns: list[str | re.Pattern], text: str):
-    for pattern in patterns:
-        if re.search(pattern, text):
-            return True
-    return False
-
-
-def todos_from_file(
-    file_path: os.PathLike,
-    patterns: list[str | re.Pattern] = [r"^\W*\s*TODO"],
-):
-
-    try:
-        with open(file_path, "r", encoding='utf-8') as infile:
-            file_lines = infile.readlines()
-    except UnicodeDecodeError:
-        # kind of a hacky way to ensure binary files are skipped
-        # but if it's stupid and it works it ain't stupid!
-        return None
-
-    counter = count(1)
-
-    # convert any lines matching a pattern to a TodoItem dataclass
-    matches = [
-        TodoItem(num, line, index=next(counter))
-        for num, line in enumerate(file_lines, start=1)
-        if match_any(patterns, line)
-    ]
-
-    if not any(matches):
-        return None
-
-    file_todos = TodosFile(str(file_path), matches)
-
-    return file_todos
 
 
 def todos_generator(
-    root_path: os.PathLike | str = "",
-    recurse: bool = True,
-    ignore_hidden: bool = True,
-    patterns: list[str | re.Pattern] = [r"^\W*\s*TODO"],
-):
+    files_iter: Iterable[os.PathLike],
+    patterns: list[re.Pattern | str] = [r"^\W*\s*TODO"],
+) -> Iterable[TodosFile]:
 
-    files = file_path_generator(
-        root_path=root_path, recurse=recurse, ignore_hidden=ignore_hidden
+    match_any = lambda patterns, text: any(
+        ((re.search(pattern, text)) for pattern in patterns)
     )
 
-    counter = count(1)
+    files_processed_counter = count(1)
 
-    for file_path in files:
-        if (file_todos := todos_from_file(file_path, patterns=patterns)) is None:
+    for file_path in files_iter:
+
+        try:
+            with open(file_path, "r", encoding="utf-8") as infile:
+                file_lines = infile.readlines()
+        except UnicodeDecodeError:
+            # kind of a hacky way to ensure binary files are skipped
+            # but if it's stupid and it works it ain't stupid!
             continue
 
-        file_todos.index = next(counter)
-        yield file_todos
+        matched_line_counter = count(1)
 
-    return
+        matches = [
+            TodoItem(num, line, index=next(matched_line_counter))
+            for num, line in enumerate(file_lines, start=1)
+            if match_any(patterns, line)
+        ]
 
+        if not any(matches):
+            continue
+
+        rel_file_path = os.path.relpath(file_path)
+
+        yield TodosFile(str(rel_file_path), matches, next(files_processed_counter))
 
 
 def main():
 
-    tgen = todos_generator(root_path='..')
+    f = file_path_generator("../dateparse")
+    t = todos_generator(f)
 
-    for f in tgen:
-        print(str(f))
-        print("")
+    for x in t:
+        print(str(x))
 
     editor: str = "vim"
     if "EDITOR" in os.environ:
         editor = os.environ["EDITOR"]
+
 
 main()
