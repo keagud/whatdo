@@ -53,7 +53,7 @@ parser.add_argument(
 
 @dataclass
 class TodoItem:
-    """Represents a single todo item"""
+    """Represents a single todo item."""
 
     line_num: int
     content: str
@@ -62,7 +62,7 @@ class TodoItem:
 
 @dataclass
 class TodosFile:
-    """Represents todos within a single file"""
+    """Represents todos within a single file."""
 
     filename: str
     items: list[TodoItem]
@@ -70,6 +70,7 @@ class TodosFile:
 
 
 def colorize(text: str, color: str) -> str:
+    """Wrapper around ANSI terminal codes for colorized output"""
     ansi_esc = "\033["
     color_codes = {
         "BLACK": 90,
@@ -88,6 +89,12 @@ def colorize(text: str, color: str) -> str:
 def file_path_generator(
     root_path: os.PathLike | str = "", recurse: bool = True, ignore_hidden: bool = True
 ) -> Iterable[os.DirEntry]:
+    """
+    Returns an iterator over all files within the given root path
+    recurse and ignore_hidden params determine if subdirectories are also searched recursively,
+    and to count hidden files and directories ('dotfiles'), respectively.
+
+    """
 
     # set the root path
 
@@ -126,13 +133,14 @@ def todos_generator(
     files_iter: Iterable[os.PathLike], pattern: re.Pattern | str | None = None
 ) -> Iterable[TodosFile]:
 
+    """
+    Takes an iterable over file path objects (os.PathLike), and an optional regular expression
+    Returns an iterable that, for each file containing at least one line matching the pattern, yields a TodosFile dataclass containing those matching lines.
+
+    """
+
     if pattern is None:
         pattern = r"^\W*\s*TODO"
-
-    # TODO remove this, and refactor so that all functions that take a regex param only take one, instead of a list
-    match_any = lambda patterns, text: any(
-        ((re.search(pattern, text)) for pattern in patterns)
-    )
 
     files_processed_counter = count(1)
 
@@ -151,7 +159,7 @@ def todos_generator(
         matches = [
             TodoItem(num, line, index=next(matched_line_counter))
             for num, line in enumerate(file_lines, start=1)
-            if match_any([pattern], line)
+            if re.search(pattern, line)
         ]
 
         if not any(matches):
@@ -165,6 +173,14 @@ def todos_generator(
 def open_at_index(
     index: str, todos_iter: Iterable[TodosFile], editor_command: str = "vim"
 ):
+    """
+    Takes an iterable over TodosFile dataclasses, and an index string containing 2 numbers delimited by a non-digit character. Optionally takes the name of a text editor executable in the current PATH (defaults to vim since it's POSIX-guaranteed)
+
+    For example, open_at_index("2.3", iter) opens the second TodosFile in the iterable to the third line matching a todo pattern.
+
+    If the index is valid, the text editor process replaces this script and so nothing is returned. If invalid, raises a KeyError.
+    
+    """
     file_index, item_index = (int(s) for s in re.split(r"\D", index, maxsplit=2))
 
     for file_todo in dropwhile(lambda x: x.index != file_index, todos_iter):
@@ -177,6 +193,12 @@ def open_at_index(
 
 
 def count_todos(todos_iter: Iterable[TodosFile]):
+    """ 
+    Takes an iterable over TodosFile dataclasses
+    Returns a list of tuples containing (filename, todos count) for each file,
+    and the overall sum, in a tuple.
+    
+    """
 
     items_sums = [(file.filename, len(file.items)) for file in todos_iter]
     total_sum = sum([file_sum for filename, file_sum in items_sums])
@@ -184,6 +206,7 @@ def count_todos(todos_iter: Iterable[TodosFile]):
 
 
 def main():
+    """Parses CLI args, and executes main program logic accordingly."""
 
     args = parser.parse_args()
 
