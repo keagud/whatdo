@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from os.path import isfile
 import re, os, argparse, sys
 
 from dataclasses import dataclass
@@ -88,7 +89,7 @@ def colorize(text: str, color: str) -> str:
 
 def file_path_generator(
     root_path: os.PathLike | str = "", recurse: bool = True, ignore_hidden: bool = True
-) -> Iterable[os.DirEntry]:
+) -> Iterable[str]:
     """
     Returns an iterator over all files within the given root path
     recurse and ignore_hidden params determine if subdirectories are also searched recursively,
@@ -98,11 +99,18 @@ def file_path_generator(
 
     # set the root path
 
+
     if not root_path:
         root_path = os.getcwd()
 
-    if isinstance(root_path, str):
-        root_path = os.fspath(root_path)
+    if  not isinstance(root_path, str):
+        root_path = str(os.fspath(root_path))
+
+    
+    if os.path.isfile(root_path):
+        yield root_path
+        return
+
 
     local_dirs: list[os.DirEntry] = []
 
@@ -119,7 +127,7 @@ def file_path_generator(
             local_dirs.append(fs_object)
             continue
 
-        yield fs_object
+        yield fs_object.path
 
     if recurse:
         for local_dir in local_dirs:
@@ -130,7 +138,7 @@ def file_path_generator(
 
 
 def todos_generator(
-    files_iter: Iterable[os.PathLike], pattern: re.Pattern | str | None = None
+    files_iter: Iterable[os.PathLike], pattern: re.Pattern
 ) -> Iterable[TodosFile]:
 
     """
@@ -139,8 +147,6 @@ def todos_generator(
 
     """
 
-    if pattern is None:
-        pattern = r"^\W*\s*TODO"
     files_processed_counter = count(1)
 
     for file_path in files_iter:
@@ -219,7 +225,9 @@ def main():
 
     count_only = bool(args.count)
 
-    pattern = args.pattern if args.pattern else None
+    pattern_str = args.pattern if args.pattern else r"^\W*\s*TODO"
+
+    pattern=re.compile(pattern_str)
 
     recurse = not bool(args.norecurse)
     ignore_hidden = not bool(args.hidden)
