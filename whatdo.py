@@ -203,7 +203,8 @@ def open_at_index(
             line_jump_command = "+" + str(todo_item.line_num)
             logging.debug(f"Opening {file_todo.filename} to item {todo_item.content}")
             logging.debug(f"{editor_command} {line_jump_command} {file_todo.filename}")
-            os.execlp(editor_command, editor_command, line_jump_command, file_todo.filename)
+            subprocess.call((editor_command, line_jump_command, file_todo.filename))
+            sys.exit(0)
 
     raise KeyError("Could not match '{}' to an indexed location".format(index))
 
