@@ -1,12 +1,17 @@
 #!/usr/bin/env python
+import os
+import subprocess
+import sys
 
-from os.path import isfile
-import re, os, argparse, sys, string,subprocess
-import logging
+import argparse
+from re import split
+from string import punctuation, whitespace
+
 from dataclasses import dataclass
 from itertools import count, dropwhile
 from typing import Iterable
 
+import logging
 
 parser = argparse.ArgumentParser(add_help=False)
 
@@ -143,12 +148,13 @@ def file_path_generator(
 def todos_generator(
     files_iter: Iterable[os.PathLike | str],
     command_start: str = "TODO",
-    ignore_chars: str = (string.whitespace + string.punctuation),
+    ignore_chars: str = (whitespace + punctuation),
 ) -> Iterable[TodosFile]:
 
     """
-    Takes an iterable over file path objects (os.PathLike), and an optional regular expression
-    Returns an iterable that, for each file containing at least one line matching the pattern, yields a TodosFile dataclass containing those matching lines.
+    Takes an iterable over file path objects (os.PathLike), and an optional string defining the start of a TODO line, (default is TODO)
+    Returns an iterable that, for each file containing at least one line matching starting with that sequence, yields a TodosFile dataclass containing those matching lines.
+    Whitespace and punctuation at the start of a line are ignored
 
     """
 
@@ -194,7 +200,7 @@ def open_at_index(
     If the index is valid, the text editor process replaces this script and so nothing is returned. If invalid, raises a KeyError.
 
     """
-    file_index, item_index = (int(s) for s in re.split(r"\D", index, maxsplit=2))
+    file_index, item_index = (int(s) for s in split(r"\D", index, maxsplit=2))
 
     for file_todo in dropwhile(lambda x: x.index != file_index, todos_iter):
         logging.debug("%(message)s")
@@ -266,7 +272,10 @@ def main():
         sys.exit()
 
     if args.goto != "":
-        open_at_index(args.goto, todos_iter, editor_command=editor)
+
+        goto_index:str =  "1.1" if args.goto == "FIRST" else args.goto
+
+        open_at_index(goto_index, todos_iter, editor_command=editor)
 
     display_todos(todos_iter)
 
