@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 
 from os.path import isfile
-import re, os, argparse, sys, string
-
+import re, os, argparse, sys, string,subprocess
+import logging
 from dataclasses import dataclass
 from itertools import count, dropwhile
 from typing import Iterable
+
 
 parser = argparse.ArgumentParser(add_help=False)
 
@@ -34,7 +35,10 @@ parser.add_argument(
 
 
 parser.add_argument(
-    "-s", "--search", type=str, help="Set a custom string for the search. Lines are selected if they begin with the search string, ignoring whitespace and punctuation. Defaults to 'TODO'"
+    "-s",
+    "--search",
+    type=str,
+    help="Set a custom string for the search. Lines are selected if they begin with the search string, ignoring whitespace and punctuation. Defaults to 'TODO'",
 )
 
 parser.add_argument(
@@ -50,6 +54,8 @@ parser.add_argument(
     action="store_true",
     help="Search inside hidden directories and files ",
 )
+
+parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 
 
 @dataclass
@@ -191,10 +197,13 @@ def open_at_index(
     file_index, item_index = (int(s) for s in re.split(r"\D", index, maxsplit=2))
 
     for file_todo in dropwhile(lambda x: x.index != file_index, todos_iter):
+        logging.debug("%(message)s")
         for todo_item in dropwhile(lambda x: x.index != item_index, file_todo.items):
 
-            line_jump_command = "+" + str(todo_item.index)
-            os.execlp(editor_command, line_jump_command, file_todo.filename)
+            line_jump_command = "+" + str(todo_item.line_num)
+            logging.debug(f"Opening {file_todo.filename} to item {todo_item.content}")
+            logging.debug(f"{editor_command} {line_jump_command} {file_todo.filename}")
+            os.execlp(editor_command, editor_command, line_jump_command, file_todo.filename)
 
     raise KeyError("Could not match '{}' to an indexed location".format(index))
 
@@ -212,12 +221,23 @@ def count_todos(todos_iter: Iterable[TodosFile]):
     return items_sums, total_sum
 
 
+def display_todos(todos_iter: Iterable[TodosFile]):
+    def print_file_todos(file: TodosFile, file_index_counter=count(1)):
+        file_index = next(file_index_counter)
+        for item_index, item in enumerate(file.items, start=1):
+            print(f"{file_index}.{item_index}\t{item}")
+
+    for todo_file in todos_iter:
+        print_file_todos(todo_file)
+
+
 def main():
     """Parses CLI args, and executes main program logic accordingly."""
 
     args = parser.parse_args()
 
-    args = parser.parse_args()
+    log_level = logging.DEBUG if args.debug else logging.ERROR
+    logging.basicConfig(level=log_level)
 
     editor: str = "vim"
     if "EDITOR" in os.environ:
@@ -225,10 +245,9 @@ def main():
 
     start_dir: str = os.getcwd() if not args.dir else args.dir
 
-    count_only = bool(args.count)
+    count_only: bool = args.count
 
-
-    search_str = args.search if args.search else "TODO"
+    search_str: str = args.search if args.search else "TODO"
 
     recurse = not bool(args.norecurse)
     ignore_hidden = not bool(args.hidden)
@@ -245,8 +264,10 @@ def main():
         print("\n {} total todo items in {} files".format(total_sum, len(items_sums)))
         sys.exit()
 
-    if args.goto:
-        pass
+    if args.goto != "":
+        open_at_index(args.goto, todos_iter, editor_command=editor)
+
+    display_todos(todos_iter)
 
 
 if __name__ == "__main__":
