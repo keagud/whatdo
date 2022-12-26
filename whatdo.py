@@ -176,7 +176,7 @@ def todos_generator(
         matched_line_counter = count(1)
 
         matches = [
-            TodoItem(num, line, index=next(matched_line_counter))
+            TodoItem(num, line.strip(), index=next(matched_line_counter))
             for num, line in enumerate(file_lines, start=1)
             if line.strip(ignore_chars).startswith(command_start)
         ]
@@ -228,14 +228,62 @@ def count_todos(todos_iter: Iterable[TodosFile]):
     return items_sums, total_sum
 
 
-def display_todos(todos_iter: Iterable[TodosFile]):
+def display_todos(
+    todos_iter: Iterable[TodosFile],
+    format_colors: tuple[str, str, str, str] = ("", "", "", ""),
+):
+
+    ansi_esc = "\033["
+    color_vals = {
+        "BLACK": 90,
+        "RED": 91,
+        "GREEN": 92,
+        "YELLOW": 93,
+        "BLUE": 94,
+        "MAGENTA": 95,
+        "CYAN": 96,
+        "WHITE": 97,
+    }
+
+    ansi_end = ansi_esc + "0m"
+
+    color_codes = {key: ansi_esc + str(val) + "m" for key, val in color_vals.items()}
+
+
+    color_title, color_index, color_line, color_content = (
+        str(color_codes[s.upper()]) if s.upper() in color_codes else ""
+        for s in format_colors
+    )
+
+
     def print_file_todos(file: TodosFile, file_index_counter=count(1)):
+
         file_index = next(file_index_counter)
         for item_index, item in enumerate(file.items, start=1):
-            print(f"{file_index}.{item_index}\t{item}")
+            display_index, display_line, display_content = [
+                ".".join((str(file_index), str(item_index))),
+                str(item.line_num),
+                item.content,
+            ]
+
+            print(
+                " ".join(
+                    (
+                        color_index,
+                        display_index,
+                        color_line,
+                        display_line,
+                        color_content,
+                        display_content,
+                        ansi_end,
+                    )
+                )
+            )
 
     for todo_file in todos_iter:
+        print(f"{color_title}{todo_file.filename}{ansi_end}")
         print_file_todos(todo_file)
+        print("")
 
 
 def main():
@@ -273,11 +321,11 @@ def main():
 
     if args.goto != "":
 
-        goto_index:str =  "1.1" if args.goto == "FIRST" else args.goto
+        goto_index: str = "1.1" if args.goto == "FIRST" else args.goto
 
         open_at_index(goto_index, todos_iter, editor_command=editor)
 
-    display_todos(todos_iter)
+    display_todos(todos_iter, format_colors=("CYAN", "WHITE", "BLUE", "RED"))
 
 
 if __name__ == "__main__":
