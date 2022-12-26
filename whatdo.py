@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from os.path import isfile
-import re, os, argparse, sys
+import re, os, argparse, sys, string
 
 from dataclasses import dataclass
 from itertools import count, dropwhile
@@ -34,7 +34,7 @@ parser.add_argument(
 
 
 parser.add_argument(
-    "-p", "--pattern", type=str, help="Set a custom regex pattern for use in the search"
+    "-s", "--search", type=str, help="Set a custom string for the search. Lines are selected if they begin with the search string, ignoring whitespace and punctuation. Defaults to 'TODO'"
 )
 
 parser.add_argument(
@@ -99,18 +99,15 @@ def file_path_generator(
 
     # set the root path
 
-
     if not root_path:
         root_path = os.getcwd()
 
-    if  not isinstance(root_path, str):
+    if not isinstance(root_path, str):
         root_path = str(os.fspath(root_path))
 
-    
     if os.path.isfile(root_path):
         yield root_path
         return
-
 
     local_dirs: list[os.DirEntry] = []
 
@@ -138,7 +135,9 @@ def file_path_generator(
 
 
 def todos_generator(
-    files_iter: Iterable[os.PathLike], pattern: re.Pattern
+    files_iter: Iterable[os.PathLike | str],
+    command_start: str = "TODO",
+    ignore_chars: str = (string.whitespace + string.punctuation),
 ) -> Iterable[TodosFile]:
 
     """
@@ -150,6 +149,9 @@ def todos_generator(
     files_processed_counter = count(1)
 
     for file_path in files_iter:
+
+        if not isinstance(file_path, str):
+            file_path = str(file_path)
 
         try:
             with open(file_path, "r", encoding="utf-8") as infile:
@@ -164,7 +166,7 @@ def todos_generator(
         matches = [
             TodoItem(num, line, index=next(matched_line_counter))
             for num, line in enumerate(file_lines, start=1)
-            if re.search(pattern, line)
+            if line.strip(ignore_chars).startswith(command_start)
         ]
 
         if not any(matches):
@@ -184,7 +186,7 @@ def open_at_index(
     For example, open_at_index("2.3", iter) opens the second TodosFile in the iterable to the third line matching a todo pattern.
 
     If the index is valid, the text editor process replaces this script and so nothing is returned. If invalid, raises a KeyError.
-    
+
     """
     file_index, item_index = (int(s) for s in re.split(r"\D", index, maxsplit=2))
 
@@ -198,11 +200,11 @@ def open_at_index(
 
 
 def count_todos(todos_iter: Iterable[TodosFile]):
-    """ 
+    """
     Takes an iterable over TodosFile dataclasses
     Returns a list of tuples containing (filename, todos count) for each file,
     and the overall sum, in a tuple.
-    
+
     """
 
     items_sums = [(file.filename, len(file.items)) for file in todos_iter]
@@ -225,24 +227,26 @@ def main():
 
     count_only = bool(args.count)
 
-    pattern_str = args.pattern if args.pattern else r"^\W*\s*TODO"
 
-    pattern=re.compile(pattern_str)
+    search_str = args.search if args.search else "TODO"
 
     recurse = not bool(args.norecurse)
     ignore_hidden = not bool(args.hidden)
 
     files_iter = file_path_generator(start_dir, recurse, ignore_hidden=ignore_hidden)
 
-    todos_iter = todos_generator(files_iter, pattern=pattern)
+    todos_iter = todos_generator(files_iter, command_start=search_str)
 
     if count_only:
         items_sums, total_sum = count_todos(todos_iter)
 
-        map(lambda x: print("{} items in file {}".format(x[1], x[0])), items_sums)
+        map(lambda x: print(f"{x[0]} items in file {x[1]}"), items_sums)
 
         print("\n {} total todo items in {} files".format(total_sum, len(items_sums)))
         sys.exit()
+
+    if args.goto:
+        pass
 
 
 if __name__ == "__main__":
